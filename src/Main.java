@@ -5,9 +5,20 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class Main {
-    static int width;
-    static int height;
-    static String filePath = "EternitySolver/lib/benchs/pieces_set/pieces_16x16.txt";
+    static int width  = 16;
+    static int height = 16;
+    static boolean mac = true;
+
+    static String filePath = mac 
+    ? "lib/benchs/pieces_set/pieces_" + String.format("%02d", width) + "x" + String.format("%02d", height) + ".txt"
+    : "EternitySolver/lib/benchs/pieces_set/pieces_" + String.format("%02d", width) + "x" + String.format("%02d", height) + ".txt" ;
+    static String benchmarkParh = mac
+    ? "lib/benchs/benchEternity2WithoutHint.txt"
+    : "EternitySolver/lib/benchs/benchEternity2WithoutHint.txt";
+    static String solutionPath = mac
+    ? "lib/solutions/solution_" + String.format("%02d", width) + "x" + String.format("%02d", height) + ".txt"
+    : "EternitySolver/lib/solutions/solution_"  + String.format("%02d", width) + "x" + String.format("%02d", height) + ".txt";
+    
     static List<Piece> pieces = new ArrayList<>(); 
 
     public static void main(String[] args) throws Exception {
@@ -45,17 +56,17 @@ public class Main {
         }
         
         // Eval eval = new Eval("EternitySolver/lib/benchs/pieces_set/pieces_" + String.format("%02d", width) + "x" + String.format("%02d", height) + ".txt");
-        Eval eval = new Eval("EternitySolver/lib/benchs/benchEternity2WithoutHint.txt");
+        Eval eval = new Eval(benchmarkParh);
         // Eval eval = new Eval(filePath);
 
         pieces = new Init(pieces, width, height).shuffle(); // Shuffle the pieces
         Solution bestSolution = new Solution(pieces);
-        bestSolution.saveToFile("EternitySolver/lib/solutions/solution_" + String.format("%02d", width) + "x" + String.format("%02d", height) + ".txt");
+        bestSolution.saveToFile(solutionPath);
 
         int bestScore = eval.evaluateSolution(bestSolution.getSolution());
 
 
-        int totalIterations = 1000000;
+        int totalIterations = 10000;
         int progressBarWidth = 50;
         while (eval.count < totalIterations) {
             pieces = new Init(pieces, width, height).shuffle(); // Shuffle the pieces
@@ -76,7 +87,7 @@ public class Main {
             System.out.print("] " + (eval.count * 100 / totalIterations) + "%");
         }
         System.out.println(); // New line after progress bar completes
-        bestSolution.saveToFile("EternitySolver/lib/solutions/solution_" + String.format("%02d", width) + "x" + String.format("%02d", height) + ".txt");
+        bestSolution.saveToFile(solutionPath);
         System.out.println("Best score: " + bestScore);
 
         // List<Piece> pieces1 = new Init(pieces, width, height).shuffle();
