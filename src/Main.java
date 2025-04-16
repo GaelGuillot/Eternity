@@ -5,8 +5,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class Main {
-    static int width  = 16;
-    static int height = 16;
+    static int width  = 4;
+    static int height = 4;
     static boolean mac = true;
 
     static String filePath = mac 
@@ -55,9 +55,8 @@ public class Main {
             e.printStackTrace();
         }
         
-        // Eval eval = new Eval("EternitySolver/lib/benchs/pieces_set/pieces_" + String.format("%02d", width) + "x" + String.format("%02d", height) + ".txt");
-        Eval eval = new Eval(benchmarkParh);
-        // Eval eval = new Eval(filePath);
+        // Eval eval = new Eval(benchmarkParh);
+        Eval eval = new Eval(filePath);
 
         pieces = new Init(pieces, width, height).shuffle(); // Shuffle the pieces
         Solution bestSolution = new Solution(pieces);
@@ -88,6 +87,7 @@ public class Main {
         }
         System.out.println(); // New line after progress bar completes
         bestSolution.saveToFile(solutionPath);
+        System.out.println("Best solution: \n" + bestSolution.toString());
         System.out.println("Best score: " + bestScore);
 
         // List<Piece> pieces1 = new Init(pieces, width, height).shuffle();
