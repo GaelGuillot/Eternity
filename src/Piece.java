@@ -21,6 +21,10 @@ public class Piece {
         return values;
     }
 
+    public PieceType getType() {
+        return type;
+    }
+
     public int getRotation() {
         return rotations;
     }
@@ -34,6 +38,10 @@ public class Piece {
             values[0] = tempVal;
         }
         rotations = (rotations + times) % 4;
+    }
+
+    public void resetRotation() {
+        this.rotate(4 - rotations);
     }
 
     

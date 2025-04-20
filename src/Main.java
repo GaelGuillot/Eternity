@@ -2,28 +2,37 @@ import java.io.BufferedReader;
 import java.io.FileReader;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 public class Main {
-    static int width  = 4;
-    static int height = 4;
+    static int width  = 16;
+    static int height = 16;
     static boolean mac = true;
 
-    static String filePath = mac 
-    ? "lib/benchs/pieces_set/pieces_" + String.format("%02d", width) + "x" + String.format("%02d", height) + ".txt"
-    : "EternitySolver/lib/benchs/pieces_set/pieces_" + String.format("%02d", width) + "x" + String.format("%02d", height) + ".txt" ;
-    static String benchmarkParh = mac
-    ? "lib/benchs/benchEternity2WithoutHint.txt"
-    : "EternitySolver/lib/benchs/benchEternity2WithoutHint.txt";
-    static String solutionPath = mac
-    ? "lib/solutions/solution_" + String.format("%02d", width) + "x" + String.format("%02d", height) + ".txt"
-    : "EternitySolver/lib/solutions/solution_"  + String.format("%02d", width) + "x" + String.format("%02d", height) + ".txt";
-    
-    static List<Piece> pieces = new ArrayList<>(); 
+    static int populationSize = 100;
+    static double elitismRate = 0.1;
+    static double mutationRate = 0.3;
+    static int totalIterations = 10000000;
+    static int progressBarWidth = 100;
 
+    static String filePath = "lib/benchs/pieces_set/pieces_" + String.format("%02d", width) + "x" + String.format("%02d", height) + ".txt";
+    static String benchmarkPath = "lib/benchs/benchEternity2WithoutHint.txt";
+    static String solutionPath = "lib/solutions/solution_" + String.format("%02d", width) + "x" + String.format("%02d", height) + ".txt";
+    
+    static List<Piece> initPieces = new ArrayList<>(); 
+    
     public static void main(String[] args) throws Exception {
+
+        Eval eval = new Eval(benchmarkPath);
+        // Eval eval = new Eval(filePath);
+
         // Parse the initial board:
-        try (BufferedReader br = new BufferedReader(new FileReader(filePath))) {
+        // try (BufferedReader br = new BufferedReader(new FileReader(filePath))) {
+        try (BufferedReader br = new BufferedReader(new FileReader(benchmarkPath))) {
             String line;
             line = br.readLine();
             String[] dimensions = line.split(" ");
@@ -48,71 +57,85 @@ public class Main {
                 else {
                     type = Piece.PieceType.CENTER;
                 }
-                pieces.add(new Piece(id, values, type));
+                initPieces.add(new Piece(id, values, type));
                 id++;
             }
         } catch (IOException e) {
             e.printStackTrace();
         }
         
-        // Eval eval = new Eval(benchmarkParh);
-        Eval eval = new Eval(filePath);
-
-        pieces = new Init(pieces, width, height).shuffle(); // Shuffle the pieces
-        Solution bestSolution = new Solution(pieces);
-        bestSolution.saveToFile(solutionPath);
-
-        int bestScore = eval.evaluateSolution(bestSolution.getSolution());
+        int maxScore = width*(width-1) + height*(height-1);
 
 
-        int totalIterations = 10000;
-        int progressBarWidth = 50;
-        while (eval.count < totalIterations) {
-            pieces = new Init(pieces, width, height).shuffle(); // Shuffle the pieces
-            Solution solution = new Solution(pieces);
-            if (eval.evaluateSolution(solution.getSolution()) > bestScore) {
-                bestScore = eval.evaluateSolution(solution.getSolution());
-                bestSolution = solution;
-            }
-            
+        List<Piece> pieces = new Init(initPieces, width, height).shuffle();
+        Solution solution = new Solution(pieces);
+
+        List<Chicken> population = new ArrayList<>();
+
+        int elitism = (int) (populationSize * elitismRate);
+
+        for (int i=0;i<=populationSize;i++){
+            pieces = new Init(initPieces, width, height).shuffle();
+            solution = new Solution(pieces);
+            population.add(new Chicken(pieces, eval.evaluateSolution(solution.getSolution())));
+        }
+
+        // Start timer
+        long startTime = System.nanoTime();
+        boolean bestSolutionFound = false;
+        
+        while (eval.count < totalIterations && !bestSolutionFound) {
+            // Get weighted population
+            List<Chicken> weightedPopulation = ChickenSorter.getWeightedPopulation(population);
+
+            // Apply crossover
+            List<Chicken> children = ChickenSorter.crossover(weightedPopulation, width, height);
+            ChickenSorter.mutate(children, width, height, mutationRate);
+            bestSolutionFound = ChickenSorter.recalculateScores(eval, children, maxScore);
+
+            // Apply elitism
+            List<Chicken> newPopulation = new ArrayList<>();
+            List<Chicken> bestChildren = ChickenSorter.getTopNChickens(children, populationSize - elitism);
+            List<Chicken> bestParents = ChickenSorter.getTopNChickens(population, elitism);
+
+            newPopulation.addAll(bestChildren);
+            newPopulation.addAll(bestParents);
+
+            population = newPopulation;
+
             // Update progress bar
             int progress = (int)((eval.count * progressBarWidth) / totalIterations);
             System.out.print("\r[");
+
+            // Calculate and display elapsed time
+            long elapsedTime = System.nanoTime() - startTime;
+            long hours = TimeUnit.NANOSECONDS.toHours(elapsedTime);
+            long minutes = TimeUnit.NANOSECONDS.toMinutes(elapsedTime) % 60;
+            long seconds = TimeUnit.NANOSECONDS.toSeconds(elapsedTime) % 60;
+            String timeString = String.format(" %02d:%02d:%02d", hours, minutes, seconds);
+
             for (int i = 0; i < progressBarWidth; i++) {
                 if (i < progress) System.out.print("=");
                 else if (i == progress) System.out.print(">");
                 else System.out.print(" ");
             }
-            System.out.print("] " + (eval.count * 100 / totalIterations) + "%");
+            System.out.print("] " + (eval.count * 100 / totalIterations) + "%" + timeString);
         }
         System.out.println(); // New line after progress bar completes
+
+        // Find the best chicken in the final population
+        Chicken bestChicken = population.get(0);
+        for (Chicken chicken : population) {
+            if (chicken.getScore() > bestChicken.getScore()) {
+                bestChicken = chicken;
+            }
+        }
+
+        // Create and save the best solution found
+        Solution bestSolution = new Solution(bestChicken.getPieces());
         bestSolution.saveToFile(solutionPath);
         System.out.println("Best solution: \n" + bestSolution.toString());
-        System.out.println("Best score: " + bestScore);
-
-        // List<Piece> pieces1 = new Init(pieces, width, height).shuffle();
-        // List<Piece> pieces2 = new Init(pieces, width, height).shuffle();
-
-        // Solution solution1 = new Solution(pieces1);
-        // Solution solution2 = new Solution(pieces2);
-
-        // System.out.println(solution1.toString());
-        // System.out.println("Score: " + eval.evaluateSolution(solution1.getSolution()));
-        // System.out.println();
-        // System.out.println(solution2.toString());
-        // System.out.println("Score: " + eval.evaluateSolution(solution2.getSolution()));
-        // System.out.println();
-
-        // crossOver(pieces1, pieces2, 12, 18);
-        // Solution crossOverSolution1 = new Solution(pieces1);
-        // Solution crossOverSolution2 = new Solution(pieces2);
-        // System.out.println(crossOverSolution1.toString());
-        // System.out.println("Score: " + eval.evaluateSolution(crossOverSolution1.getSolution()));
-        // System.out.println();
-        // System.out.println(crossOverSolution2.toString());
-        // System.out.println("Score: " + eval.evaluateSolution(crossOverSolution2.getSolution()));
-        // System.out.println();
-
+        System.out.println("Best score: " + bestChicken.getScore());
     }
 
     public static void swapById(List<Piece> pieces, int id1, int id2) {
@@ -142,50 +165,121 @@ public class Main {
 
     public static void crossOver(List<Piece> pieces1, List<Piece> pieces2, int start, int end) {
         // Check that start and end are not on borders
-        if (start % width == 0 || start % width == width - 1 || 
-            start < width || start >= width * (height - 1) ||
-            end % width == 0 || end % width == width - 1 ||
-            end < width || end >= width * (height - 1)) {
-            throw new IllegalArgumentException("Start and end positions must not be on borders");
-        }
+        // if (start % width == 0 || start % width == width - 1 || 
+        //     start < width || start >= width * (height - 1) ||
+        //     end % width == 0 || end % width == width - 1 ||
+        //     end < width || end >= width * (height - 1)) {
+        //     throw new IllegalArgumentException("Start and end positions must not be on borders");
+        // }
 
-        List<Piece> replaced1 = new ArrayList<>();
-        List<Piece> replaced2 = new ArrayList<>();
-        List<Integer> idReplaced1 = new ArrayList<>();
-        List<Integer> idReplaced2 = new ArrayList<>();
-        List<Integer> different1 = new ArrayList<>();
-        List<Integer> different2 = new ArrayList<>();
+        Map<Piece.PieceType, List<Piece>> replaced1 = new EnumMap<>(Piece.PieceType.class);
+        replaced1.put(Piece.PieceType.CORNER, new ArrayList<>());
+        replaced1.put(Piece.PieceType.BORDER, new ArrayList<>());
+        replaced1.put(Piece.PieceType.CENTER, new ArrayList<>());
+        
+        Map<Piece.PieceType, List<Piece>> replaced2 = new EnumMap<>(Piece.PieceType.class);
+        replaced2.put(Piece.PieceType.CORNER, new ArrayList<>());
+        replaced2.put(Piece.PieceType.BORDER, new ArrayList<>());
+        replaced2.put(Piece.PieceType.CENTER, new ArrayList<>());
+        
+        Map<Piece.PieceType, List<Integer>> idReplaced1 = new EnumMap<>(Piece.PieceType.class);
+        idReplaced1.put(Piece.PieceType.CORNER, new ArrayList<>());
+        idReplaced1.put(Piece.PieceType.BORDER, new ArrayList<>());
+        idReplaced1.put(Piece.PieceType.CENTER, new ArrayList<>());
+
+        Map<Piece.PieceType, List<Integer>> idReplaced2 = new EnumMap<>(Piece.PieceType.class);
+        idReplaced2.put(Piece.PieceType.CORNER, new ArrayList<>());
+        idReplaced2.put(Piece.PieceType.BORDER, new ArrayList<>());
+        idReplaced2.put(Piece.PieceType.CENTER, new ArrayList<>());
+
+        Map<Piece.PieceType, List<Integer>> different1 = new EnumMap<>(Piece.PieceType.class);
+        different1.put(Piece.PieceType.CORNER, new ArrayList<>());
+        different1.put(Piece.PieceType.BORDER, new ArrayList<>());
+        different1.put(Piece.PieceType.CENTER, new ArrayList<>());
+
+        Map<Piece.PieceType, List<Integer>> different2 = new EnumMap<>(Piece.PieceType.class);
+        different2.put(Piece.PieceType.CORNER, new ArrayList<>());
+        different2.put(Piece.PieceType.BORDER, new ArrayList<>());
+        different2.put(Piece.PieceType.CENTER, new ArrayList<>());
 
         for (int i = start; i <= end; i++) {
             if (i%width >= start%width && i%width <= end%width) {
-                replaced1.add(pieces1.get(i));
-                replaced2.add(pieces2.get(i));
+                replaced1.get(pieces1.get(i).getType()).add(pieces1.get(i));
+                replaced2.get(pieces2.get(i).getType()).add(pieces2.get(i));
             }
         }
-        for (int i = 0; i < replaced1.size(); i++) {
-            idReplaced1.add(replaced1.get(i).getId());
-            idReplaced2.add(replaced2.get(i).getId());
-        }
-        for (int id : idReplaced1) {
-            if (!idReplaced2.contains(id)) {
-                different1.add(id);
+        for (Piece.PieceType type : Piece.PieceType.values()) {
+            if (replaced1.get(type).isEmpty()) {
+                continue;
+            }
+            for (int i = 0; i < replaced1.get(type).size(); i++) {
+                idReplaced1.get(type).add(replaced1.get(type).get(i).getId());
+                idReplaced2.get(type).add(replaced2.get(type).get(i).getId());
+            }
+            for (int id : idReplaced1.get(type)) {
+                if (!idReplaced2.get(type).contains(id)) {
+                    different1.get(type).add(id);
+                }
+            }
+            for (int id : idReplaced2.get(type)) {
+                if (!idReplaced1.get(type).contains(id)) {
+                    different2.get(type).add(id);
+                }
+            }
+            for (int i = 0; i < different1.get(type).size(); i++) {
+                swapById(pieces1, different1.get(type).get(i), different2.get(type).get(i));
+            }
+            int pos = 0;
+            for (int i = start; i <= end; i++) {
+                if (i%width >= start%width && i%width <= end%width) {
+                    if (pieces1.get(i).getType() == type) {
+                        pieces1.set(i, replaced2.get(type).get(pos));
+                        pos++;
+                    }
+                }
             }
         }
-        for (int id : idReplaced2) {
-            if (!idReplaced1.contains(id)) {
-                different2.add(id);
-            }
-        }
-        for (int i = 0; i < different1.size(); i++) {
-            swapById(pieces1, different1.get(i), different2.get(i));
-        }
+        fixEdges(pieces1);
+        fixEdges(pieces2);
 
-        int pos = 0;
-        for (int i = start; i <= end; i++) {
-            if (i%width >= start%width && i%width <= end%width) {
-                pieces1.set(i, replaced2.get(pos));
-                pos++;
+    }
+
+    public static void fixEdges(List<Piece> pieces){
+        List<Piece> corners = new ArrayList<>();
+        List<Piece> borders = new ArrayList<>();
+        for (Piece piece : pieces){
+            if (piece.getType() == Piece.PieceType.CORNER) {
+                corners.add(piece);
             }
+            else if (piece.getType() == Piece.PieceType.BORDER) {
+                borders.add(piece);
+            }
+        }
+        for (Piece piece : corners){
+            piece.resetRotation();
+        }
+        for (Piece piece : borders){
+            piece.resetRotation();
+        }
+        corners.get(0).rotate(1);
+        corners.get(1).rotate(2);
+        corners.get(3).rotate(3);
+
+        int count = 0;
+        for (Piece border: borders){
+            if (count<width-2){
+                border.rotate(2);
+            }
+            else if (count< width - 2 + 2*(height - 2)){
+                if (count % 2 == width % 2){
+                    border.rotate(1);
+                }
+                else{
+                    border.rotate(3);
+                }
+            }
+            count++;
         }
     }
+
 }
