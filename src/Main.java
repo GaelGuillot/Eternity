@@ -24,10 +24,8 @@ public class Main {
     public static void main(String[] args) throws Exception {
         int populationSize = 20;
         double elitismRate = 0.1;
-        double mutationRate = 0.1;
+        double mutationRate = 0.4;
         int totalIterations = 500000;
-
-        // Eval eval = new Eval(filePath);
 
         // Parse the initial board:
         // try (BufferedReader br = new BufferedReader(new FileReader(filePath))) {
@@ -67,7 +65,6 @@ public class Main {
         
         // Run 100 times and calculate mean
 
-        System.out.println("Running 50 iterations...");
         double totalScore = 0;
 
         double[] scores = new double[7];
@@ -75,13 +72,13 @@ public class Main {
         for (int j = 1; j < 8; j++) {
             System.out.println("Population size: " + 50*j);
             totalScore = 0;
-            for (int i = 0; i < 25; i++) {
-                System.out.println("Iteration " + (i + 1) + "/25");
-                int bestScore = run(populationSize, elitismRate, 0.1*j, totalIterations);
+            for (int i = 0; i < 50; i++) {
+                System.out.println("Iteration " + (i + 1) + "/50");
+                int bestScore = run(j*50, elitismRate, mutationRate, totalIterations);
                 totalScore += bestScore;
             }
-            System.out.println("Mean score: " + totalScore / 25);
-            scores[j-1] = totalScore / 25;
+            System.out.println("Mean score: " + totalScore / 50);
+            scores[j-1] = totalScore / 50;
         }
 
         System.out.println("Scores: " + Arrays.toString(scores));
