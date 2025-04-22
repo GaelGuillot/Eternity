@@ -6,6 +6,8 @@ import java.util.ArrayList;
 
 public class ChickenSorter {
     
+    public static int totalInvalidSolutions = 0;
+    
     /**
      * Sorts a list of chickens in descending order by their scores
      * @param chickens List of chickens to sort
@@ -42,7 +44,8 @@ public class ChickenSorter {
         // Calculate total score
         int totalScore = 0;
         for (Chicken chicken : chickens) {
-            totalScore += chicken.getScore();
+            int score = chicken.getScore();
+            totalScore += (score == -1) ? 0 : score;
         }
         
         // If all scores are 0, use uniform selection
@@ -59,7 +62,8 @@ public class ChickenSorter {
             int cumulativeScore = 0;
             
             for (Chicken chicken : chickens) {
-                cumulativeScore += chicken.getScore();
+                int score = chicken.getScore();
+                cumulativeScore += (score == -1) ? 0 : score;
                 if (randomValue < cumulativeScore) {
                     newPopulation.add(new Chicken(chicken));
                     break;
@@ -141,26 +145,7 @@ public class ChickenSorter {
         
         return newPopulation;
     }
-
-    /**
-     * Recalculates the score for each chicken in the list
-     * @param eval The evaluator used to calculate scores
-     * @param chickens List of chickens to recalculate scores for
-     */
-    public static boolean recalculateScores(Eval eval, List<Chicken> chickens, int maxScore) {
-        boolean bestSolutionFound = false;
-        for (Chicken chicken : chickens) {
-            Solution solution = new Solution(chicken.getPieces());
-            int newScore = eval.evaluateSolution(solution.getSolution());
-            if (newScore == maxScore){
-                System.out.println("Best solution found");
-                bestSolutionFound = true;
-            }
-            chicken.setScore(newScore);
-        }
-        return bestSolutionFound;
-    }
-
+    
     /**
      * Applies mutation to a list of chickens
      * @param chickens List of chickens to mutate
@@ -168,7 +153,7 @@ public class ChickenSorter {
      * @param height Height of the board
      * @param mutationRate Probability of mutation for each chicken
      */
-    public static void mutate(List<Chicken> chickens, int width, int height, double mutationRate) {
+    public static void mutate(List<Chicken> chickens, double mutationRate) {
         Random random = new Random();
         
         for (Chicken chicken : chickens) {
@@ -189,7 +174,7 @@ public class ChickenSorter {
             
             // Randomly rotate some pieces
             for (Piece piece : pieces) {
-                if (random.nextDouble() < 0.1) { // 10% chance to rotate each piece
+                if (random.nextDouble() < mutationRate) { // 10% chance to rotate each piece
                     int rotations = random.nextInt(4); // Random number of rotations (0-3)
                     piece.rotate(rotations);
                 }
@@ -199,4 +184,26 @@ public class ChickenSorter {
             Main.fixEdges(pieces);
         }
     }
-} 
+
+    /**
+     * Recalculates the score for each chicken in the list
+     * @param eval The evaluator used to calculate scores
+     * @param chickens List of chickens to recalculate scores for
+     */
+    public static boolean recalculateScores(Eval eval, List<Chicken> chickens, int maxScore) {
+        boolean bestSolutionFound = false;
+        for (Chicken chicken : chickens) {
+            Solution solution = new Solution(chicken.getPieces());
+            int newScore = eval.evaluateSolution(solution.getSolution());
+            if (newScore == maxScore){
+                System.out.println("Best solution found");
+                bestSolutionFound = true;
+            }
+            if (newScore == -1){
+                totalInvalidSolutions++;  // Increment counter for invalid solutions
+            } 
+            chicken.setScore(newScore);
+        }
+        return bestSolutionFound;
+    }
+}

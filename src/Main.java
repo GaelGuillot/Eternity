@@ -2,23 +2,19 @@ import java.io.BufferedReader;
 import java.io.FileReader;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.io.FileWriter;
 
 public class Main {
     static int width  = 16;
     static int height = 16;
-    static boolean mac = true;
-
-    static int populationSize = 100;
-    static double elitismRate = 0.1;
-    static double mutationRate = 0.3;
-    static int totalIterations = 10000000;
     static int progressBarWidth = 100;
-
+    
     static String filePath = "lib/benchs/pieces_set/pieces_" + String.format("%02d", width) + "x" + String.format("%02d", height) + ".txt";
     static String benchmarkPath = "lib/benchs/benchEternity2WithoutHint.txt";
     static String solutionPath = "lib/solutions/solution_" + String.format("%02d", width) + "x" + String.format("%02d", height) + ".txt";
@@ -26,8 +22,11 @@ public class Main {
     static List<Piece> initPieces = new ArrayList<>(); 
     
     public static void main(String[] args) throws Exception {
+        int populationSize = 20;
+        double elitismRate = 0.1;
+        double mutationRate = 0.1;
+        int totalIterations = 500000;
 
-        Eval eval = new Eval(benchmarkPath);
         // Eval eval = new Eval(filePath);
 
         // Parse the initial board:
@@ -65,10 +64,38 @@ public class Main {
         }
         
         int maxScore = width*(width-1) + height*(height-1);
+        
+        // Run 100 times and calculate mean
 
+        System.out.println("Running 50 iterations...");
+        double totalScore = 0;
 
+        double[] scores = new double[7];
+        
+        for (int j = 1; j < 8; j++) {
+            System.out.println("Population size: " + 50*j);
+            totalScore = 0;
+            for (int i = 0; i < 25; i++) {
+                System.out.println("Iteration " + (i + 1) + "/25");
+                int bestScore = run(populationSize, elitismRate, 0.1*j, totalIterations);
+                totalScore += bestScore;
+            }
+            System.out.println("Mean score: " + totalScore / 25);
+            scores[j-1] = totalScore / 25;
+        }
+
+        System.out.println("Scores: " + Arrays.toString(scores));
+
+        // run(populationSize, elitismRate, mutationRate, totalIterations);
+        
+    }
+
+    public static int run(int populationSize, double elitismRate, double mutationRate, int totalIterations){
         List<Piece> pieces = new Init(initPieces, width, height).shuffle();
         Solution solution = new Solution(pieces);
+        Eval eval = new Eval(benchmarkPath);
+
+        int maxScore = width*(width-1) + height*(height-1);
 
         List<Chicken> population = new ArrayList<>();
 
@@ -83,6 +110,8 @@ public class Main {
         // Start timer
         long startTime = System.nanoTime();
         boolean bestSolutionFound = false;
+
+        List<Integer> bestScores = new ArrayList<>();
         
         while (eval.count < totalIterations && !bestSolutionFound) {
             // Get weighted population
@@ -90,7 +119,7 @@ public class Main {
 
             // Apply crossover
             List<Chicken> children = ChickenSorter.crossover(weightedPopulation, width, height);
-            ChickenSorter.mutate(children, width, height, mutationRate);
+            ChickenSorter.mutate(children, mutationRate);
             bestSolutionFound = ChickenSorter.recalculateScores(eval, children, maxScore);
 
             // Apply elitism
@@ -120,8 +149,30 @@ public class Main {
                 else System.out.print(" ");
             }
             System.out.print("] " + (eval.count * 100 / totalIterations) + "%" + timeString);
+
+            Chicken bestChicken = population.get(0);
+            for (Chicken chicken : population) {
+                if (chicken.getScore() > bestChicken.getScore()) {
+                    bestChicken = chicken;
+                }
+            }
+            bestScores.add(bestChicken.getScore());
         }
         System.out.println(); // New line after progress bar completes
+
+        System.out.println("Total invalid solutions: " + ChickenSorter.totalInvalidSolutions);
+
+        // Save scores to CSV
+        String csvPath = "lib/scores/scores_" + "p" + populationSize + "_i" + totalIterations + 
+                        "_e" + (int)(elitismRate*100) + "_m" + (int)(mutationRate*100) + ".csv";
+        try (FileWriter writer = new FileWriter(csvPath)) {
+            for (int score : bestScores) {
+                writer.write(score + "\n");
+            }
+            System.out.println("Scores saved to: " + csvPath);
+        } catch (IOException e) {
+            System.err.println("Error saving scores to CSV: " + e.getMessage());
+        }
 
         // Find the best chicken in the final population
         Chicken bestChicken = population.get(0);
@@ -134,11 +185,13 @@ public class Main {
         // Create and save the best solution found
         Solution bestSolution = new Solution(bestChicken.getPieces());
         bestSolution.saveToFile(solutionPath);
-        System.out.println("Best solution: \n" + bestSolution.toString());
+        // System.out.println("Best solution: \n" + bestSolution.toString());
         System.out.println("Best score: " + bestChicken.getScore());
+        
+        return bestChicken.getScore();
     }
 
-    public static void swapById(List<Piece> pieces, int id1, int id2) {
+    public static void swapById(List<Piece> pieces, int id1, int id2) { 
         int pos1 = -1;
         int pos2 = -1;
         
@@ -209,9 +262,6 @@ public class Main {
             }
         }
         for (Piece.PieceType type : Piece.PieceType.values()) {
-            if (replaced1.get(type).isEmpty()) {
-                continue;
-            }
             for (int i = 0; i < replaced1.get(type).size(); i++) {
                 idReplaced1.get(type).add(replaced1.get(type).get(i).getId());
                 idReplaced2.get(type).add(replaced2.get(type).get(i).getId());
